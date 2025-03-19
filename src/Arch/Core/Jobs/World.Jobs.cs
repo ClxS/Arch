@@ -104,6 +104,7 @@ public partial class World
         {
             var archetypeSize = archetype.ChunkCount;
             var part = new RangePartitioner(Environment.ProcessorCount, archetypeSize);
+
             foreach (var range in part)
             {
                 var job = pool.Get();
@@ -115,15 +116,14 @@ public partial class World
                 var jobHandle = SharedJobScheduler.Schedule(job);
                 JobsCache.Add(job);
                 JobHandles.Add(jobHandle);
-            }
 
-            // Schedule, flush, wait, return.
-            var handle = SharedJobScheduler.CombineDependencies(JobHandles.Span);
-            SharedJobScheduler.Flush();
-            handle.Complete();
+                SharedJobScheduler.Flush(jobHandle);
+            }
 
             for (var index = 0; index < JobsCache.Count; index++)
             {
+                SharedJobScheduler.Wait(JobHandles[index]);
+
                 var job = Unsafe.As<ChunkIterationJob<T>>(JobsCache[index]);
                 pool.Return(job);
             }
@@ -152,6 +152,8 @@ public partial class World
             throw new Exception("JobScheduler was not initialized, create one instance of JobScheduler. This creates a singleton used for parallel iterations.");
         }
 
+        JobHandle handle = new();
+
         // Cast pool in an unsafe fast way and run the query.
         var query = Query(in queryDescription);
         foreach (var archetype in query.GetArchetypeIterator())
@@ -170,12 +172,13 @@ public partial class World
 
                 var jobHandle = SharedJobScheduler.Schedule(job);
                 JobHandles.Add(jobHandle);
+
+                handle.SetDependsOn(jobHandle);
             }
         }
 
         // Schedule, flush, wait, return.
-        var handle = SharedJobScheduler.CombineDependencies(JobHandles.Span);
-        SharedJobScheduler.Flush();
+        SharedJobScheduler.Flush(handle);
         JobHandles.Clear();
 
         return handle;
