@@ -3,7 +3,6 @@
   <PropertyGroup>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <LangVersion>latest</LangVersion>
-    <TargetFrameworks>net8.0; net6.0; netstandard2.1</TargetFrameworks>
 
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
@@ -34,9 +33,6 @@
     <Copyright>Apache2.0</Copyright>
 
     <NoWarn>1701;1702;1591</NoWarn>
-
-    <Configurations>Debug;Debug-PureECS;Debug-Events;Release;Release-PureECS;Release-Events;</Configurations>
-
     <UnityPublish>true</UnityPublish>
   </PropertyGroup>
 
