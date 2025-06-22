@@ -56,6 +56,25 @@ public sealed partial class WorldTest
     }
 
     /// <summary>
+    ///     Check the dispose pattern.
+    /// </summary>
+    [Test]
+    public void WorldDestroyTwice()
+    {
+        using var worldA = World.Create(); // World A has ID 0 and size 0
+        worldA.Create(); // worldA is now size 1
+        World.Destroy(worldA); // world A is size 0
+
+        using var worldB = World.Create(); // World B has ID 0 and size 0
+        var e0 = worldB.Create(0); // world B now has size 1
+        World.Destroy(worldA); // World B still appears to have size 1
+        var e1 = worldB.Create(0); // World B has size 2
+
+        worldB.Get<int>(e0); // This causes a null reference exception
+        worldB.Get<int>(e1); // This also causes a null reference exception
+    }
+
+    /// <summary>
     ///     Checks if the <see cref="World"/> creates <see cref="Entity"/> correctly.
     /// </summary>
     [Test]
@@ -318,7 +337,7 @@ public sealed partial class WorldTest
         var archetype = world.Archetypes[0];
         That(world.Size, Is.EqualTo(1));
         That(world.Capacity, Is.EqualTo(archetype.EntitiesPerChunk));
-        That(archetype.ChunkCount, Is.EqualTo(0));
+        That(archetype.ChunkCount, Is.EqualTo(1));
         That(archetype.ChunkCapacity, Is.EqualTo(1));
 
         // Recycled ids must be trimmed too so that the newest created entity is not out of bounds!
@@ -645,6 +664,39 @@ public partial class WorldTest
         That(_world.GetArchetype(entity2), Is.EqualTo(_world.GetArchetype(entity)));
         That(arch, Is.EqualTo(_world.GetArchetype(entity)));
     }
+
+    /// <summary>
+    ///     Checks if generic TryGet works on entities.
+    /// </summary>
+    [Test]
+    public void TryGet()
+    {
+        var entity = _world.Create(new Transform());
+
+        That(_world.TryGet(entity, out Transform _), Is.EqualTo(true));
+        That(_world.TryGet(entity, out Rotation _), Is.EqualTo(false));
+    }
+
+    [Test]
+    public void TryGetRefSuccess()
+    {
+        var entity = _world.Create(new Transform());
+
+        var aRef = _world.TryGetRef<Transform>(entity, out var exists);
+
+        That(exists, Is.EqualTo(true));
+        That(aRef, Is.Not.EqualTo(null));
+    }
+
+    [Test]
+    public void TryGetRefFail()
+    {
+        var entity = _world.Create(new Transform());
+
+        _world.TryGetRef<Rotation>(entity, out var exists);
+
+        That(exists, Is.EqualTo(false));
+    }
 }
 
 
@@ -698,6 +750,18 @@ public partial class WorldTest
         _world.TryGetArchetype(_entityAiGroup, out var arch);
         That(_world.GetArchetype(entity2), Is.EqualTo(_world.GetArchetype(entity)));
         That(arch, Is.EqualTo(_world.GetArchetype(entity)));
+    }
+
+    /// <summary>
+    ///     Checks if generic TryGet works on entities.
+    /// </summary>
+    [Test]
+    public void TryGet_NonGeneric()
+    {
+        var entity = _world.Create(new Transform());
+
+        That(_world.TryGet(entity, Component<Transform>.ComponentType, out var xform), Is.EqualTo(true));
+        That(_world.TryGet(entity, Component<Rotation>.ComponentType, out var rot), Is.EqualTo(false));
     }
 }
 

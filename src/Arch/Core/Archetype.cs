@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Diagnostics.Contracts;
 using Arch.Core.Extensions;
 using Arch.Core.Extensions.Internal;
 using Arch.Core.Utils;
@@ -7,6 +8,7 @@ using Arch.LowLevel.Jagged;
 using Collections.Pooled;
 using CommunityToolkit.HighPerformance;
 using Array = System.Array;
+using System.Runtime.InteropServices;
 
 namespace Arch.Core;
 
@@ -43,7 +45,6 @@ public record struct Slot
     /// <param name="first">The first <see cref="Slot"/>.</param>
     /// <param name="second">The second <see cref="Slot"/>.</param>
     /// <returns>The result <see cref="Slot"/>.</returns>
-
     public static Slot operator +(Slot first, Slot second)
     {
         return new Slot(first.Index + second.Index, first.ChunkIndex + second.ChunkIndex);
@@ -54,7 +55,6 @@ public record struct Slot
     /// </summary>
     /// <param name="slot">The <see cref="Slot"/>.</param>
     /// <returns>The <see cref="Slot"/> with index increased by one..</returns>
-
     public static Slot operator ++(Slot slot)
     {
         slot.Index++;
@@ -65,7 +65,6 @@ public record struct Slot
     ///     Validates the <see cref="Slot"/>, moves the <see cref="Slot"/> if it is outside a <see cref="Chunk.Capacity"/> to match it.
     /// </summary>
     /// <returns></returns>
-
     public void Wrap(int capacity)
     {
         // Result outside valid chunk, wrap into next one
@@ -89,7 +88,6 @@ public record struct Slot
     /// <param name="source">The <see cref="Slot"/> to shift by one.</param>
     /// <param name="sourceCapacity">The capacity of the chunk the slot is in.</param>
     /// <returns></returns>
-
     public static Slot Shift(ref Slot source, int sourceCapacity)
     {
         source.Index++;
@@ -105,7 +103,6 @@ public record struct Slot
     /// <param name="destination">The destination <see cref="Slot"/>, a reference point at which the copy or shift operation starts.</param>
     /// <param name="sourceCapacity">The source <see cref="Chunk.Capacity"/>.</param>
     /// <param name="destinationCapacity">The destination <see cref="Chunk.Capacity"/></param>
-
     public static Slot Shift(in Slot source, int sourceCapacity, in Slot destination, int destinationCapacity)
     {
         var freeSpot = destination;
@@ -135,14 +132,14 @@ public class Archetypes : IDisposable
     /// </summary>
     public Archetypes(int capacity)
     {
-        Items = new PooledList<Archetype>(capacity, ClearMode.Never);
+        Items = new NetStandardList<Archetype>(capacity);
         _hashCode = -1;
     }
 
     /// <summary>
     ///     The <see cref="PooledList{T}"/> that contains all <see cref="Archetype"/>s.
     /// </summary>
-    public PooledList<Archetype> Items {  get; }
+    public NetStandardList<Archetype> Items {  get; }
 
     /// <summary>
     ///     The count of this instance.
@@ -183,7 +180,7 @@ public class Archetypes : IDisposable
     /// <returns>The <see cref="Span{T}"/>.</returns>
     public Span<Archetype> AsSpan()
     {
-        return Items.Span;
+        return Items.AsSpan();
     }
 
     /// <summary>
@@ -252,7 +249,7 @@ public class Archetypes : IDisposable
     /// </summary>
     public void Dispose()
     {
-        Items.Dispose();
+        Items.Clear();
     }
 }
 
@@ -263,7 +260,6 @@ public class Archetypes : IDisposable
 /// </summary>
 public sealed partial class Archetype
 {
-
     /// <summary>
     ///     A lookup array that maps the component id to an index within the component array of a <see cref="Chunk"/> to quickly find the correct array for the component type.
     ///     Is being stored here since all <see cref="Chunks"/> share the same instance to reduce allocations.
@@ -298,6 +294,7 @@ public sealed partial class Archetype
     }
 
     /// <summary>
+    ///     The component types that the <see cref="Arch.Core.Entity"/>'s stored here have.
     ///     The base size of a <see cref="Chunk"/> within the <see cref="Chunks"/> in KB.
     ///     All <see cref="Chunk"/>s will have a minimum of this size. The actual size is <see cref="ChunkSize"/>.
     /// </summary>
@@ -575,6 +572,52 @@ public sealed partial class Archetype
     }
 
     /// <summary>
+    ///     Try get the index of a component within this archetype. Returns false if the archetype does not have this
+    ///     component.
+    /// </summary>
+    /// <param name="i">The index.</param>
+    /// <typeparam name="T">The type.</typeparam>
+    /// <returns>True if it was successfully.</returns>
+    [Pure]
+    internal bool TryIndex<T>(out int i)
+    {
+        var id = Component<T>.ComponentType.Id;
+        Debug.Assert(id != -1, $"Supplied component index is invalid");
+
+        if (id >= _componentIdToArrayIndex.Length)
+        {
+            i = -1;
+            return false;
+        }
+
+        i = _componentIdToArrayIndex.DangerousGetReferenceAt(id);
+        return i != -1;
+    }
+
+    /// <summary>
+    ///     Try get the index of a component within this archetype. Returns false if the archetype does not have this
+    ///     component.
+    /// </summary>
+    /// <param name="type">The <see cref="ComponentType"/>.</param>
+    /// <param name="i">The index.</param>
+    /// <returns>True if it was successfully.</returns>
+    [Pure]
+    internal bool TryIndex(ComponentType type, out int i)
+    {
+        var id = type.Id;
+        Debug.Assert(id != -1, $"Supplied component index is invalid");
+
+        if (id >= _componentIdToArrayIndex.Length)
+        {
+            i = -1;
+            return false;
+        }
+
+        i = _componentIdToArrayIndex.DangerousGetReferenceAt(id);
+        return i != -1;
+    }
+
+    /// <summary>
     ///     Returns a reference of the component of an <see cref="Arch.Core.Entity"/> at a given <see cref="Slot"/>.
     /// </summary>
     /// <typeparam name="T">The component type.</typeparam>
@@ -744,7 +787,7 @@ public sealed partial class Archetype
     /// </summary>
     internal void TrimExcess()
     {
-        Chunks.Count = Count; // By setting the Count we will assure that unnecessary chunks are trimmed.
+        Chunks.Count = Count + 1; // By setting the Count we will assure that unnecessary chunks are trimmed.
         Chunks.TrimExcess();
     }
 }
@@ -817,6 +860,7 @@ public sealed partial class Archetype
         return next;
     }
 
+    // TODO: Copy should only copy, add transfer methods and those should modify the destination and source state.
     /// <summary>
     ///     Copies all <see cref="Chunks"/> from one <see cref="Archetype"/> to another.
     ///     Deterministic, the content of the first <see cref="Archetype"/> will be copied to the other <see cref="Archetype"/>, attached to its last partial <see cref="Chunk"/>.
@@ -827,6 +871,7 @@ public sealed partial class Archetype
     {
         // Make sure other archetype can fit additional entities from this archetype.
         destination.EnsureEntityCapacity(destination.EntityCount + source.EntityCount);
+        var sourceSignature = source.Signature;
 
         // Iterate each source chunk to copy them
         for (var sourceChunkIndex = 0; sourceChunkIndex <= source.Count; sourceChunkIndex++)
@@ -844,7 +889,7 @@ public sealed partial class Archetype
                 var remainingCapacity = destinationChunk.Buffer;
                 var amountToCopy = Math.Min(sourceChunk.Count, remainingCapacity);
 
-                Chunk.Copy(ref sourceChunk, amountCopied, ref destinationChunk, destinationChunk.Count, amountToCopy);
+                Chunk.Copy(ref sourceChunk, amountCopied, ref sourceSignature, ref destinationChunk, destinationChunk.Count, amountToCopy);
 
                 // Apply copied amount to track the progress
                 sourceChunk.Count -= amountToCopy;
@@ -863,18 +908,53 @@ public sealed partial class Archetype
     }
 
     /// <summary>
+    ///     Copies all components from an <see cref="Archetype"/> to another archetype <see cref="Archetype"/> .
+    /// </summary>
+    /// <param name="source">The <see cref="Archetype"/> from which the <see cref="Arch.Core.Entity"/> should move.</param>
+    /// <param name="sourceIndex">The <see cref="Chunk"/>-Index in the <see cref="source"/> where we start to copy.</param>
+    /// <param name="destination">The <see cref="Archetype"/> into which the <see cref="Arch.Core.Entity"/> should move.</param>
+    /// <param name="destinationIndex">The <see cref="Chunk"/>-Index in the <see cref="destination"/> where start to inser the copy.</param>
+    internal static void CopyComponents(Archetype source, int sourceIndex, Archetype destination, int destinationIndex, int length)
+    {
+        // Iterate each source chunk to copy them
+        var sourceSignature = source.Signature;
+        for (var sourceChunkIndex = sourceIndex; sourceChunkIndex <= length; sourceChunkIndex++)
+        {
+            ref var sourceChunk = ref source.GetChunk(sourceChunkIndex);
+
+            var amountLeft = sourceChunk.Count;
+            var amountCopied = 0;
+
+            // Loop over destination chunk and fill them with the source chunk till either the source chunk is empty or theres no more capacity
+            for (int destinationChunkIndex = destinationIndex; destinationChunkIndex < destination.ChunkCapacity && amountLeft > 0; destinationChunkIndex++)
+            {
+                // Determine amount that can be copied into destination
+                ref var destinationChunk = ref destination.GetChunk(destinationChunkIndex);
+                var amountToCopy = Math.Min(amountLeft, destinationChunk.Buffer);
+
+                Chunk.CopyComponents(ref sourceChunk, amountCopied, ref sourceSignature, ref destinationChunk, destinationChunk.Count, amountToCopy);
+
+                // Apply copied amount to track the progress
+                amountLeft -= amountToCopy;
+                amountCopied += amountToCopy;
+            }
+        }
+    }
+
+    /// <summary>
     ///     Copies an <see cref="Arch.Core.Entity"/> and all its components from a <see cref="Slot"/> within this <see cref="Archetype"/> to a <see cref="Slot"/> within another <see cref="Archetype"/> .
     /// </summary>
-    /// <param name="from">The <see cref="Archetype"/> from which the <see cref="Arch.Core.Entity"/> should move.</param>
+    /// <param name="source">The <see cref="Archetype"/> from which the <see cref="Arch.Core.Entity"/> should move.</param>
     /// <param name="to">The <see cref="Archetype"/> into which the <see cref="Arch.Core.Entity"/> should move.</param>
     /// <param name="fromSlot">The <see cref="Slot"/> that targets the <see cref="Arch.Core.Entity"/> that should move.</param>
     /// <param name="toSlot">The <see cref="Slot"/> to which the <see cref="Arch.Core.Entity"/> should move.</param>
-
-    internal static void CopyComponents(Archetype from, ref Slot fromSlot, Archetype to, ref Slot toSlot)
+    internal static void CopyComponents(Archetype source, ref Slot fromSlot, Archetype to, ref Slot toSlot)
     {
+        var sourceSignature = source.Signature;
+
         // Copy items from old to new chunk
-        ref var oldChunk = ref from.GetChunk(fromSlot.ChunkIndex);
+        ref var oldChunk = ref source.GetChunk(fromSlot.ChunkIndex);
         ref var newChunk = ref to.GetChunk(toSlot.ChunkIndex);
-        Chunk.CopyComponents(ref oldChunk, fromSlot.Index, ref newChunk, toSlot.Index, 1);
+        Chunk.CopyComponents(ref oldChunk, fromSlot.Index, ref sourceSignature, ref newChunk, toSlot.Index, 1);
     }
 }

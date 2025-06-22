@@ -259,8 +259,7 @@ public partial struct Chunk
     public bool Has<T>()
     {
         var id = Component<T>.ComponentType.Id;
-        var idToArrayIndex = ComponentIdToArrayIndex;
-        return id < idToArrayIndex.Length && idToArrayIndex.DangerousGetReferenceAt(id) != -1;
+        return Has(id);
     }
 
     /// <summary>
@@ -372,6 +371,20 @@ public partial struct Chunk
 {
 
     /// <summary>
+    ///     Try get the index of a component within this <see cref="Chunk"/>. Returns false if the <see cref="Chunk"/> does not have this
+    ///     component.
+    /// </summary>
+    /// <param name="i">The index.</param>
+    /// <typeparam name="T">The type.</typeparam>
+    /// <returns>True if it was successfully.</returns>
+    [Pure]
+    internal bool TryIndex<T>(out int i)
+    {
+        var id = Component<T>.ComponentType.Id;
+        return TryIndex(id, out i);
+    }
+
+    /// <summary>
     ///     Returns the component array index of a component.
     /// </summary>
     /// <typeparam name="T">The componen type.</typeparam>
@@ -445,18 +458,25 @@ public partial struct Chunk
     /// <summary>
     ///     Checks if a component is included in this <see cref="Chunk"/>.
     /// </summary>
+    /// <param name="id">The <see cref="ComponentType"/> id.</param>
+    /// <returns>True if included, false otherwise.</returns>
+    [Pure]
+    public bool Has(int id)
+    {
+        var idToArrayIndex = ComponentIdToArrayIndex;
+        return id < idToArrayIndex.Length && idToArrayIndex.DangerousGetReferenceAt(id) != -1;
+    }
+
+    /// <summary>
+    ///     Checks if a component is included in this <see cref="Chunk"/>.
+    /// </summary>
     /// <param name="t">The type.</param>
     /// <returns>True if included, false otherwise.</returns>
     [Pure]
     public bool Has(ComponentType t)
     {
         var id = t.Id;
-        if (id >= ComponentIdToArrayIndex.Length)
-        {
-            return false;
-        }
-
-        return ComponentIdToArrayIndex.DangerousGetReferenceAt(id) != -1;
+        return Has(id);
     }
 
     /// <summary>
@@ -470,6 +490,28 @@ public partial struct Chunk
     {
         var array = GetArray(type);
         return array.GetValue(index);
+    }
+
+    /// <summary>
+    ///     Try get the index of a component within this <see cref="Chunk"/>. Returns false if the <see cref="Chunk"/> does not have this
+    ///     component.
+    /// </summary>
+    /// <param name="id">The <see cref="ComponentType"/> Id.</param>
+    /// <param name="i">The index.</param>
+    /// <returns>True if it was successfully.</returns>
+    [Pure]
+    internal bool TryIndex(int id, out int i)
+    {
+        Debug.Assert(id != -1, $"Supplied component index is invalid");
+
+        if (id >= ComponentIdToArrayIndex.Length)
+        {
+            i = -1;
+            return false;
+        }
+
+        i = ComponentIdToArrayIndex.DangerousGetReferenceAt(id);
+        return i != -1;
     }
 
     /// <summary>
@@ -550,33 +592,21 @@ public partial struct Chunk
     /// </summary>
     /// <param name="source">The source <see cref="Chunk"/>.</param>
     /// <param name="index">The start index in the source <see cref="Chunk"/>.</param>
+    /// <param name="sourceSignature">The <see cref="Signature"/> from the source archetype.</param>
     /// <param name="destination">The destination <see cref="Chunk"/>.</param>
     /// <param name="destinationIndex">The start index in the destination <see cref="Chunk"/>.</param>
     /// <param name="length">The length indicating the amount of <see cref="Entity"/>s being copied.</param>
-    [Pure]
-    internal static void Copy(ref Chunk source, int index, ref Chunk destination, int destinationIndex, int length)
+    internal static void Copy(
+        ref Chunk source, int index, ref Signature sourceSignature,
+        ref Chunk destination, int destinationIndex,
+        int length)
     {
         // Arrays
         var entities = source.Entities;
-        var sourceComponents = source.Components;
 
         // Copy entities array
         Array.Copy(entities, index, destination.Entities, destinationIndex, length);
-
-        // Copy component arrays
-        for (var i = 0; i < sourceComponents.Length; i++)
-        {
-            var sourceArray = sourceComponents[i];
-            var sourceType = (ComponentType) sourceArray.GetType().GetElementType()!;
-
-            if (!destination.Has(sourceType))
-            {
-                continue;
-            }
-
-            var destinationArray = destination.GetArray(sourceType);
-            Array.Copy(sourceArray, index, destinationArray, destinationIndex, length);
-        }
+        CopyComponents(ref source, index, ref sourceSignature, ref destination, destinationIndex, length);
     }
 
     /// <summary>
@@ -584,12 +614,12 @@ public partial struct Chunk
     /// </summary>
     /// <param name="source">The source <see cref="Chunk"/>.</param>
     /// <param name="index">The start index in the source <see cref="Chunk"/>.</param>
+    /// <param name="sourceSignature">The <see cref="Signature"/> from the source archetype.</param>
     /// <param name="destination">The destination <see cref="Chunk"/>.</param>
     /// <param name="destinationIndex">The start index in the destination <see cref="Chunk"/>.</param>
     /// <param name="length">The length indicating the amount of <see cref="Entity"/>s being copied.</param>
-    [Pure]
-    internal static void CopyComponents(ref Chunk source, int index, ref Chunk destination, int destinationIndex, int length)
-    {
+    internal static void CopyComponents(ref Chunk source, int index, ref Signature sourceSignature, ref Chunk destination, int destinationIndex, int length) {
+
         // Arrays
         var sourceComponents = source.Components;
 
@@ -597,15 +627,15 @@ public partial struct Chunk
         for (var i = 0; i < sourceComponents.Length; i++)
         {
             var sourceArray = sourceComponents[i];
-            var sourceType = sourceArray.GetType().GetElementType();
-            var compType = (ComponentType) sourceType!;
+            var sourceType = sourceSignature.Components[i];
 
-            if (!destination.Has(compType))
+            // Doesn't have component in destination array.
+            if (!destination.TryIndex(sourceType.Id, out var arrayIndex))
             {
                 continue;
             }
 
-            var destinationArray = destination.GetArray(compType);
+            var destinationArray = destination.Components.DangerousGetReferenceAt(arrayIndex);
             Array.Copy(sourceArray, index, destinationArray, destinationIndex, length);
         }
     }

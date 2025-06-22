@@ -330,7 +330,7 @@ public sealed partial class CommandBuffer : IDisposable
             Debug.Assert(world.IsAlive(entity), $"CommandBuffer can not to set components to the dead {wrappedEntity.Entity}");
 
             // Get entity chunk
-            var entityInfo = world.EntityInfo[entity.Id];
+            var entityInfo = world.EntityInfo.GetEntityData(entity.Id);
             var archetype = entityInfo.Archetype;
             ref readonly var chunk = ref archetype.GetChunk(entityInfo.Slot.ChunkIndex);
             var chunkIndex = entityInfo.Slot.Index;
@@ -436,7 +436,7 @@ public sealed partial class CommandBuffer : IDisposable
 public sealed partial class CommandBuffer
 {
     /// <summary>
-    ///     Adds an list of new components to the <see cref="Entity"/> and moves it to the new <see cref="Archetype"/>.
+    ///     Adds a list of new components to the <see cref="Entity"/> and moves it to the new <see cref="Archetype"/>.
     /// </summary>
     /// <param name="world">The world to operate on.</param>
     /// <param name="entity">The <see cref="Entity"/>.</param>
@@ -444,7 +444,8 @@ public sealed partial class CommandBuffer
     [SkipLocalsInit]
     internal static void AddRange(World world, Entity entity, Span<ComponentType> components)
     {
-        var oldArchetype = world.EntityInfo.GetArchetype(entity.Id);
+        ref var data = ref world.EntityInfo.EntityData[entity.Id];
+        var oldArchetype = data.Archetype;
 
         // BitSet to stack/span bitset, size big enough to contain ALL registered components.
         Span<uint> stack = stackalloc uint[BitSet.RequiredLength(ComponentRegistry.Size)];
@@ -465,6 +466,6 @@ public sealed partial class CommandBuffer
             newArchetype = world.GetOrCreate(newSignature);
         }
 
-        world.Move(entity, oldArchetype, newArchetype, out _);
+        world.Move(entity, ref data, oldArchetype, newArchetype, out _);
     }
 }
