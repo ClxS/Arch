@@ -467,5 +467,9 @@ public sealed partial class CommandBuffer
         }
 
         world.Move(entity, ref data, oldArchetype, newArchetype, out _);
+        foreach (ComponentType cmp in components)
+        {
+            world.OnComponentAdded(entity, cmp);
+        }
     }
 }
