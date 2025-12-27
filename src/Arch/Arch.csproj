@@ -71,6 +71,10 @@
     <InternalsVisibleTo Include="Arch.Tests" />
   </ItemGroup>
 
+  <PropertyGroup>
+    <DefineConstants>%(DefineConstants);EVENTS</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup>
     <Using Include="System" />
     <Using Include="System.Collections" />

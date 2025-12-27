@@ -17,16 +17,33 @@ public delegate void EntityDestroyedHandler(in Entity entity);
 public delegate void ComponentAddedHandler<T>(in Entity entity, ref T comp);
 
 /// <summary>
+///     A delegate called once a componnet was added for a specific <see cref="Entity"/>.
+/// <typeparam name="T">The generic component.</typeparam>
+/// </summary>
+public delegate void ComponentTypeAddedHandler(in Entity entity, ComponentType comp);
+
+/// <summary>
 ///     A delegate called once a component was set for a specific <see cref="Entity"/>.
 /// </summary>
 /// <typeparam name="T">The generic component.</typeparam>
 public delegate void ComponentSetHandler<T>(in Entity entity, ref T comp);
 
 /// <summary>
+///     A delegate called once a component was set for a specific <see cref="Entity"/>.
+/// </summary>
+/// <typeparam name="T">The generic component.</typeparam>
+public delegate void ComponentTypeSetHandler(in Entity entity, ComponentType comp);
+
+/// <summary>
 ///     A delegate called once a component was removed from a specific <see cref="Entity"/>.
 /// <typeparam name="T">The generic component.</typeparam>
 /// </summary>
 public delegate void ComponentRemovedHandler<T>(in Entity entity, ref T comp);
+/// <summary>
+///     A delegate called once a component was removed from a specific <see cref="Entity"/>.
+/// <typeparam name="T">The generic component.</typeparam>
+/// </summary>
+public delegate void ComponentTypeRemovedHandler(in Entity entity, ComponentType comp);
 
 /// <summary>
 ///     A delegate called once a componnet was added for a specific <see cref="Entity"/>.

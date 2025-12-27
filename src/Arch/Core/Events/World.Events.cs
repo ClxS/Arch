@@ -29,6 +29,21 @@ public partial class World
     private readonly List<EntityDestroyedHandler> _entityDestroyedHandlers = new(InitialCapacity);
 
     /// <summary>
+    ///     All <see cref="ComponentTypeAddedHandler"/>s in a <see cref="List{T}"/> which will be called after Component added.
+    /// </summary>
+    private readonly List<ComponentTypeAddedHandler> _componentTypeAddedHandlers = new();
+
+    /// <summary>
+    ///     All <see cref="ComponentTypeAddedHandler"/>s in a <see cref="List{T}"/> which will be called after Component set.
+    /// </summary>
+    private readonly List<ComponentTypeSetHandler> _componentTypeSetHandlers = new();
+
+    /// <summary>
+    ///     All <see cref="ComponentTypeAddedHandler"/>s in a <see cref="List{T}"/> which will be called after Component removed.
+    /// </summary>
+    private readonly List<ComponentTypeRemovedHandler> _componentTypeRemovedHandlers = new();
+
+    /// <summary>
     ///     All <see cref="Events"/> in an array which will be acessed for add, remove or set operations.
     /// </summary>
     private Events.Events[] _compEvents = new Events.Events[InitialCapacity];
@@ -88,6 +103,38 @@ public partial class World
     }
 
     /// <summary>
+    ///     Adds a delegate to be called when a component of type <typeparamref name="T"/> is added to an entity.
+    ///     <see cref="Add"/>
+    /// </summary>
+    /// <param name="handler">The delegate to call.</param>
+    /// <typeparam name="T">The component type.</typeparam>
+    public void SubscribeComponentAdded(ComponentTypeAddedHandler handler)
+    {
+#if EVENTS
+        lock (_componentTypeAddedHandlers)
+        {
+            _componentTypeAddedHandlers.Add(handler);
+        }
+#endif
+    }
+
+    /// <summary>
+    ///     Adds a delegate to be called when any is set on an entity.
+    ///     <see cref="Set"/>
+    /// </summary>
+    /// <param name="handler">The delegate to call.</param>
+    /// <typeparam name="T">The component type.</typeparam>
+    public void SubscribeComponentSet(ComponentTypeSetHandler handler)
+    {
+#if EVENTS
+        lock (_componentTypeSetHandlers)
+        {
+            _componentTypeSetHandlers.Add(handler);
+        }
+#endif
+    }
+
+    /// <summary>
     ///     Adds a delegate to be called when a component of type <typeparamref name="T"/> is set on an entity.
     ///     <see cref="Set"/>
     /// </summary>
@@ -140,6 +187,22 @@ public partial class World
     }
 
     /// <summary>
+    ///     Adds a delegate to be called when a component of type <typeparamref name="T"/> is removed from an entity.
+    ///     <see cref="Remove"/>
+    /// </summary>
+    /// <param name="handler">The delegate to call.</param>
+    /// <typeparam name="T">The component type.</typeparam>
+    public void SubscribeComponentRemoved(ComponentTypeRemovedHandler handler)
+    {
+#if EVENTS
+        lock (_componentTypeRemovedHandlers)
+        {
+            _componentTypeRemovedHandlers.Add(handler);
+        }
+#endif
+    }
+
+    /// <summary>
     ///     Calls all handlers subscribed to entity creation.
     /// </summary>
     /// <param name="entity">The entity that got created.</param>
@@ -152,6 +215,7 @@ public partial class World
         {
             count = _entityCreatedHandlers.Count;
         }
+
         // The thread-safety here relies on the fact that handlers can NEVER be unsubscribed.
         // We still have to lock to access the handler, because what if someone is adding in the middle of our access?
         for (var i = 0; i < count; i++)
@@ -203,10 +267,26 @@ public partial class World
     public void OnComponentAdded<T>(Entity entity)
     {
 #if EVENTS
+        int count;
+        lock (_componentTypeAddedHandlers)
+        {
+            count = _componentTypeAddedHandlers.Count;
+        }
+
+        for (var i = 0; i < count; i++)
+        {
+            ComponentTypeAddedHandler handler;
+            lock (_componentTypeAddedHandlers)
+            {
+                handler = _componentTypeAddedHandlers[i];
+            }
+
+            handler.Invoke(in entity, Component.GetComponentType(typeof(T)));
+        }
+
         ref readonly var events = ref GetEvents<T>();
         ref var added = ref Get<T>(entity);
 
-        int count;
         lock (events.ComponentAddedGenericHandlers)
         {
             count = events.ComponentAddedGenericHandlers.Count;
@@ -234,10 +314,26 @@ public partial class World
     public void OnComponentSet<T>(Entity entity)
     {
 #if EVENTS
+        int count;
+        lock (_componentTypeSetHandlers)
+        {
+            count = _componentTypeSetHandlers.Count;
+        }
+
+        for (var i = 0; i < count; i++)
+        {
+            ComponentTypeSetHandler handler;
+            lock (_componentTypeSetHandlers)
+            {
+                handler = _componentTypeSetHandlers[i];
+            }
+
+            handler.Invoke(in entity, Component.GetComponentType(typeof(T)));
+        }
+
         ref readonly var events = ref GetEvents<T>();
         ref var set = ref Get<T>(entity);
 
-        int count;
         lock (events.ComponentSetGenericHandlers)
         {
             count = events.ComponentSetGenericHandlers.Count;
@@ -265,10 +361,26 @@ public partial class World
     public void OnComponentRemoved<T>(Entity entity)
     {
 #if EVENTS
+        int count;
+        lock (_componentTypeRemovedHandlers)
+        {
+            count = _componentTypeRemovedHandlers.Count;
+        }
+
+        for (var i = 0; i < count; i++)
+        {
+            ComponentTypeRemovedHandler handler;
+            lock (_componentTypeRemovedHandlers)
+            {
+                handler = _componentTypeRemovedHandlers[i];
+            }
+
+            handler.Invoke(in entity, Component.GetComponentType(typeof(T)));
+        }
+
         ref readonly var events = ref GetEvents<T>();
         ref var removed = ref Get<T>(entity);
 
-        int count;
         lock (events.ComponentRemovedGenericHandlers)
         {
             count = events.ComponentRemovedGenericHandlers.Count;
@@ -296,13 +408,29 @@ public partial class World
     public void OnComponentAdded(Entity entity, ComponentType compType)
     {
 #if EVENTS
+        int count;
+        lock (_componentTypeAddedHandlers)
+        {
+            count = _componentTypeAddedHandlers.Count;
+        }
+
+        for (var i = 0; i < count; i++)
+        {
+            ComponentTypeAddedHandler handler;
+            lock (_componentTypeAddedHandlers)
+            {
+                handler = _componentTypeAddedHandlers[i];
+            }
+
+            handler.Invoke(in entity, compType);
+        }
+
         var events = GetEvents(compType);
         if (events == null)
         {
             return;
         }
 
-        int count;
         lock (events.ComponentAddedHandlers)
         {
             count = events.ComponentAddedHandlers.Count;
@@ -330,13 +458,29 @@ public partial class World
     public void OnComponentSet(Entity entity, object comp)
     {
 #if EVENTS
+        int count;
+        lock (_componentTypeSetHandlers)
+        {
+            count = _componentTypeSetHandlers.Count;
+        }
+
+        for (var i = 0; i < count; i++)
+        {
+            ComponentTypeSetHandler handler;
+            lock (_componentTypeSetHandlers)
+            {
+                handler = _componentTypeSetHandlers[i];
+            }
+
+            handler.Invoke(in entity, Component.GetComponentType(comp.GetType()));
+        }
+
         var events = GetEvents(comp.GetType());
         if (events == null)
         {
             return;
         }
 
-        int count;
         lock (events.ComponentSetHandlers)
         {
             count = events.ComponentSetHandlers.Count;
@@ -364,13 +508,29 @@ public partial class World
     public void OnComponentRemoved(Entity entity, ComponentType compType)
     {
 #if EVENTS
+        int count;
+        lock (_componentTypeRemovedHandlers)
+        {
+            count = _componentTypeRemovedHandlers.Count;
+        }
+
+        for (var i = 0; i < count; i++)
+        {
+            ComponentTypeRemovedHandler handler;
+            lock (_componentTypeRemovedHandlers)
+            {
+                handler = _componentTypeRemovedHandlers[i];
+            }
+
+            handler.Invoke(in entity, compType);
+        }
+
         var events = GetEvents(compType);
         if (events == null)
         {
             return;
         }
 
-        int count;
         lock (events.ComponentRemovedHandlers)
         {
             count = events.ComponentRemovedHandlers.Count;
