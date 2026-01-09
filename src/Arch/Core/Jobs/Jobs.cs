@@ -177,7 +177,7 @@ public sealed class ChunkIterationJob<T> : IJob where T : IChunkJob
     /// </summary>
     public ChunkIterationJob()
     {
-        Chunks = Array.Empty<Chunk>();
+        Chunks = [];
     }
 
     /// <summary>

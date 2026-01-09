@@ -190,11 +190,11 @@ internal class SparseSet
     public SparseSet(int capacity = 64)
     {
         Capacity = capacity;
-        Entities = new List<SparseEntity>();
+        Entities = [];
 
         UsedSize = 0;
-        Used = Array.Empty<int>();
-        Components = Array.Empty<SparseArray>();
+        Used = [];
+        Components = [];
     }
 
     /// <summary>

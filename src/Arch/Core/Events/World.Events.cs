@@ -31,17 +31,17 @@ public partial class World
     /// <summary>
     ///     All <see cref="ComponentTypeAddedHandler"/>s in a <see cref="List{T}"/> which will be called after Component added.
     /// </summary>
-    private readonly List<ComponentTypeAddedHandler> _componentTypeAddedHandlers = new();
+    private readonly List<ComponentTypeAddedHandler> _componentTypeAddedHandlers = [];
 
     /// <summary>
     ///     All <see cref="ComponentTypeAddedHandler"/>s in a <see cref="List{T}"/> which will be called after Component set.
     /// </summary>
-    private readonly List<ComponentTypeSetHandler> _componentTypeSetHandlers = new();
+    private readonly List<ComponentTypeSetHandler> _componentTypeSetHandlers = [];
 
     /// <summary>
     ///     All <see cref="ComponentTypeAddedHandler"/>s in a <see cref="List{T}"/> which will be called after Component removed.
     /// </summary>
-    private readonly List<ComponentTypeRemovedHandler> _componentTypeRemovedHandlers = new();
+    private readonly List<ComponentTypeRemovedHandler> _componentTypeRemovedHandlers = [];
 
     /// <summary>
     ///     All <see cref="Events"/> in an array which will be acessed for add, remove or set operations.

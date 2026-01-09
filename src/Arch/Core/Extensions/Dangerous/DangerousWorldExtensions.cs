@@ -27,7 +27,7 @@ public static class DangerousWorldExtensions
     /// /// <returns>a tuple (id, version) list of the recycled entities.</returns>
     public static List<(int, int)> GetRecycledEntityIds(this World world)
     {
-        List<(int, int)> recycledIdsList = new();
+        List<(int, int)> recycledIdsList = [];
         foreach (RecycledEntity id in world.RecycledIds)
         {
             recycledIdsList.Add((id.Id, id.Version));
