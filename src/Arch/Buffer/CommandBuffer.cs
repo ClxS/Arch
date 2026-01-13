@@ -278,9 +278,9 @@ public sealed partial class CommandBuffer : IDisposable
     ///     This operation should only happen on the main thread.
     /// </remarks>
     /// <param name="world">The <see cref="World"/> where the commands will be playbacked too.</param>
-    /// <param name="dispose">If true it will clear the recorded operations after they were playbacked, if not they will stay.</param>
+    /// <param name="clearBufferAfterApplication">If true it will clear the recorded operations after they were playbacked, if not they will stay.</param>
 
-    public void Playback(World world, bool dispose = true)
+    public void Playback(World world, bool clearBufferAfterApplication = true)
     {
         // Create recorded entities.
         foreach (var cmd in Creates)
@@ -398,7 +398,7 @@ public sealed partial class CommandBuffer : IDisposable
         }
 
         // Reset values.
-        if (!dispose)
+        if (!clearBufferAfterApplication)
         {
             return;
         }
