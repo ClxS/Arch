@@ -72,14 +72,13 @@ public readonly record struct ComponentType
 ///     Those are represented by <see cref="ComponentType"/>'s.
 /// </summary>
 /// <remarks>
-///     Simultaneous readers are supported, but simultaneous readers and writers are not.
-///     Ensure that modification happens on an isolated thread.
-///     In <see cref="World"/> this is implemented via marked structural-change methods.
+///     Thread-safe for concurrent readers and writers via <see cref="ReaderWriterLockSlim"/>.
 /// </remarks>
 public static class ComponentRegistry
 {
     private static readonly Dictionary<Type, ComponentType> _typeToComponentType = new(64);
-    private static Type?[] _types = new Type[64];
+    private static volatile Type?[] _types = new Type[64];
+    private static readonly ReaderWriterLockSlim _rwLock = new();
 
     /// <summary>
     ///     All registered components, maps their <see cref="Type"/> to their <see cref="ComponentType"/>.
@@ -102,12 +101,13 @@ public static class ComponentRegistry
     /// <summary>
     ///     Gets or sets the total number of registered components in the project.
     /// </summary>
+    private static volatile int _size;
     public static int Size
     {
 
-        get;
+        get => _size;
 
-        private set;
+        private set => _size = value;
     }
 
     /// <summary>
@@ -120,19 +120,27 @@ public static class ComponentRegistry
 
     private static ComponentType Add(Type type, int typeSize)
     {
-        if (TryGet(type, out var meta))
+        _rwLock.EnterWriteLock();
+        try
         {
+            if (_typeToComponentType.TryGetValue(type, out var meta))
+            {
+                return meta;
+            }
+
+            // Register and assign component id
+            var id = Size + 1;
+            meta = new ComponentType(id, typeSize);
+            _typeToComponentType.Add(type, meta);
+            _types = _types.Add(id, type);
+
+            Size++;
             return meta;
         }
-
-        // Register and assign component id
-        var id = Size + 1;
-        meta = new ComponentType(id, typeSize);
-        _typeToComponentType.Add(type, meta);
-        _types = _types.Add(id, type);
-
-        Size++;
-        return meta;
+        finally
+        {
+            _rwLock.ExitWriteLock();
+        }
     }
 
     /// <summary>
@@ -145,12 +153,20 @@ public static class ComponentRegistry
 
     public static ComponentType Add(Type type, ComponentType componentType)
     {
-        // Register and assign component id
-        _typeToComponentType.TryAdd(type, componentType);
-        _types = _types.Add(componentType.Id, type);
+        _rwLock.EnterWriteLock();
+        try
+        {
+            // Register and assign component id
+            _typeToComponentType.TryAdd(type, componentType);
+            _types = _types.Add(componentType.Id, type);
 
-        Size++;
-        return componentType;
+            Size++;
+            return componentType;
+        }
+        finally
+        {
+            _rwLock.ExitWriteLock();
+        }
     }
 
     /// <summary>
@@ -196,7 +212,15 @@ public static class ComponentRegistry
 
     public static bool Has(Type type)
     {
-        return TypeToComponentType.ContainsKey(type);
+        _rwLock.EnterReadLock();
+        try
+        {
+            return _typeToComponentType.ContainsKey(type);
+        }
+        finally
+        {
+            _rwLock.ExitReadLock();
+        }
     }
 
     /// <summary>
@@ -207,9 +231,17 @@ public static class ComponentRegistry
 
     public static bool Remove<T>()
     {
-        var componentType = Component<T>.ComponentType;
-        _types[componentType.Id] = null;
-        return _typeToComponentType.Remove(componentType.Type);
+        _rwLock.EnterWriteLock();
+        try
+        {
+            var componentType = Component<T>.ComponentType;
+            _types[componentType.Id] = null;
+            return _typeToComponentType.Remove(componentType.Type);
+        }
+        finally
+        {
+            _rwLock.ExitWriteLock();
+        }
     }
 
     /// <summary>
@@ -220,9 +252,17 @@ public static class ComponentRegistry
 
     public static bool Remove(Type type)
     {
-        ComponentType componentType = type;
-        _types[componentType.Id] = null;
-        return _typeToComponentType.Remove(type);
+        _rwLock.EnterWriteLock();
+        try
+        {
+            ComponentType componentType = type;
+            _types[componentType.Id] = null;
+            return _typeToComponentType.Remove(type);
+        }
+        finally
+        {
+            _rwLock.ExitWriteLock();
+        }
     }
 
     /// <summary>
@@ -234,9 +274,17 @@ public static class ComponentRegistry
 
     public static bool Remove(Type type, out ComponentType compType)
     {
-        var removed = _typeToComponentType.Remove(type, out compType);
-        _types[compType.Id] = null;
-        return removed;
+        _rwLock.EnterWriteLock();
+        try
+        {
+            var removed = _typeToComponentType.Remove(type, out compType);
+            _types[compType.Id] = null;
+            return removed;
+        }
+        finally
+        {
+            _rwLock.ExitWriteLock();
+        }
     }
 
     /// <summary>
@@ -250,10 +298,24 @@ public static class ComponentRegistry
 
     public static void Replace(Type oldType, Type newType, int newTypeSize)
     {
-        var id = Remove(oldType, out var oldComponentType) ? oldComponentType.Id : ++Size;
+        _rwLock.EnterWriteLock();
+        try
+        {
+            // Inline the Remove logic to avoid re-acquiring the lock
+            var removed = _typeToComponentType.Remove(oldType, out var oldComponentType);
+            if (removed)
+            {
+                _types[oldComponentType.Id] = null;
+            }
+            var id = removed ? oldComponentType.Id : ++Size;
 
-        _typeToComponentType.Add(newType, new ComponentType(id, newTypeSize));
-        _types = _types.Add(id, newType);
+            _typeToComponentType.Add(newType, new ComponentType(id, newTypeSize));
+            _types = _types.Add(id, newType);
+        }
+        finally
+        {
+            _rwLock.ExitWriteLock();
+        }
     }
 
     /// <summary>
@@ -303,7 +365,15 @@ public static class ComponentRegistry
 
     public static bool TryGet(Type type, out ComponentType componentType)
     {
-        return TypeToComponentType.TryGetValue(type, out componentType);
+        _rwLock.EnterReadLock();
+        try
+        {
+            return _typeToComponentType.TryGetValue(type, out componentType);
+        }
+        finally
+        {
+            _rwLock.ExitReadLock();
+        }
     }
 
     /// <summary>
@@ -391,7 +461,7 @@ public static class Component
     ///     Searches a <see cref="ComponentType"/> by its <see cref="Type"/>. If it does not exist, it will be added.
     /// </summary>
     /// <remarks>
-    ///     Not thread-safe; ensure no other threads are accessing or modifying the <see cref="ComponentRegistry"/>.
+    ///     Thread-safe; the underlying <see cref="ComponentRegistry"/> operations are protected by a <see cref="ReaderWriterLockSlim"/>.
     /// </remarks>
     /// <param name="type">The <see cref="Type"/>.</param>
     /// <returns>The <see cref="ComponentType"/>.</returns>

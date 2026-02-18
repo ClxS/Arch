@@ -69,10 +69,28 @@ public delegate void ForEach(Entity entity);
 public partial class World
 {
     /// <summary>
+    ///     Dedicated lock object for synchronizing access to the <see cref="Worlds"/> array.
+    ///     Using a dedicated object avoids the lock-on-resized-object bug that occurs when
+    ///     locking on the <see cref="Worlds"/> array itself (which changes reference on resize).
+    /// </summary>
+    private static readonly Lock _worldsLock = new();
+
+    /// <summary>
+    ///     Volatile backing field for the <see cref="Worlds"/> property.
+    ///     Volatile ensures all threads see the latest array reference after a resize,
+    ///     preventing out-of-bounds reads via DangerousGetReferenceAt in entity extension methods.
+    /// </summary>
+    private static volatile World[] _worlds = new World[4];
+
+    /// <summary>
     ///     A list of all existing <see cref="Worlds"/>.
     ///     Should not be modified by the user.
     /// </summary>
-    public static World[] Worlds { get; private set; } = new World[4];
+    public static World[] Worlds
+    {
+        get => _worlds;
+        private set => _worlds = value;
+    }
 
     /// <summary>
     ///     Stores recycled <see cref="World"/> IDs.
@@ -106,7 +124,7 @@ public partial class World
 #if PURE_ECS
         return new World(-1, chunkSizeInBytes, minimumAmountOfEntitiesPerChunk, archetypeCapacity, entityCapacity);
 #else
-        lock (Worlds)
+        lock (_worldsLock)
         {
             var recycle = RecycledWorldIds.TryDequeue(out var id);
             var recycledId = recycle ? id : WorldSize;
@@ -533,7 +551,7 @@ public partial class World : IDisposable
         _isDisposed = true;
         var world = this;
 #if !PURE_ECS
-        lock (Worlds)
+        lock (_worldsLock)
         {
             Worlds[world.Id] = null!;
             RecycledWorldIds.Enqueue(world.Id);
