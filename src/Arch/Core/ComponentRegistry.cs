@@ -414,6 +414,7 @@ public static class ComponentRegistry
 public static class ArrayRegistry
 {
     private static readonly JaggedArray<Func<int, Array>> _createFactories = new(128);
+    private static readonly Lock _lock = new();
 
     /// <summary>
     ///     Adds a new array type and registers it.
@@ -421,7 +422,10 @@ public static class ArrayRegistry
     /// <typeparam name="T">The type of the array.</typeparam>
     public static void Add<T>()
     {
-        _createFactories.Add(Component<T>.ComponentType.Id, ArrayFactory<T>.Create);
+        lock (_lock)
+        {
+            _createFactories.Add(Component<T>.ComponentType.Id, ArrayFactory<T>.Create);
+        }
     }
 
     /// <summary>
@@ -432,7 +436,10 @@ public static class ArrayRegistry
     /// <returns>The created array.</returns>
     public static Array GetArray(ComponentType type, int capacity)
     {
-        return _createFactories.TryGetValue(type.Id, out Func<int, Array> func) ? func(capacity) : Array.CreateInstance(type.Type, capacity);
+        lock (_lock)
+        {
+            return _createFactories.TryGetValue(type.Id, out Func<int, Array> func) ? func(capacity) : Array.CreateInstance(type.Type, capacity);
+        }
     }
 
     /// <summary>

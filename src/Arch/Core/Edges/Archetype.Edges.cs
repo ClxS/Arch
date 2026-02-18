@@ -13,6 +13,13 @@ public partial class Archetype
     private const int BucketSize = 16;
 
     /// <summary>
+    ///     Dedicated lock object for synchronizing access to <see cref="_addEdges"/> and <see cref="_removeEdges"/>.
+    ///     Ensures thread safety when multiple worlds (on different threads) trigger archetype edge operations
+    ///     that may resize the underlying <see cref="SparseJaggedArray{T}"/> concurrently.
+    /// </summary>
+    private readonly Lock _edgeLock = new();
+
+    /// <summary>
     ///     Caches other <see cref="Archetype"/>s indexed by the
     ///     <see cref="ComponentType.Id"/> that needs to be added in order to reach them.
     /// </summary>
@@ -34,8 +41,11 @@ public partial class Archetype
 
     internal void AddAddEdge(int index, Archetype archetype)
     {
-        _addEdges.EnsureCapacity(index);
-        _addEdges.Add(index, archetype);
+        lock (_edgeLock)
+        {
+            _addEdges.EnsureCapacity(index);
+            _addEdges.Add(index, archetype);
+        }
     }
 
     /// <summary>
@@ -46,8 +56,11 @@ public partial class Archetype
 
     internal void AddRemoveEdge(int index, Archetype archetype)
     {
-        _removeEdges.EnsureCapacity(index);
-        _removeEdges.Add(index, archetype);
+        lock (_edgeLock)
+        {
+            _removeEdges.EnsureCapacity(index);
+            _removeEdges.Add(index, archetype);
+        }
     }
 
     /// <summary>
@@ -58,7 +71,10 @@ public partial class Archetype
 
     internal bool HasAddEdge(int index)
     {
-        return _addEdges.ContainsKey(index);
+        lock (_edgeLock)
+        {
+            return _addEdges.ContainsKey(index);
+        }
     }
 
     /// <summary>
@@ -69,7 +85,10 @@ public partial class Archetype
 
     internal bool HasRemoveEdge(int index)
     {
-        return _removeEdges.ContainsKey(index);
+        lock (_edgeLock)
+        {
+            return _removeEdges.ContainsKey(index);
+        }
     }
 
     /// <summary>
@@ -83,7 +102,10 @@ public partial class Archetype
 
     internal Archetype GetAddEdge(int index)
     {
-        return _addEdges[index];
+        lock (_edgeLock)
+        {
+            return _addEdges[index];
+        }
     }
 
     /// <summary>
@@ -97,28 +119,10 @@ public partial class Archetype
 
     internal Archetype GetRemoveEdge(int index)
     {
-        return _removeEdges[index];
-    }
-
-
-    /// <summary>
-    ///     Removes an Edge at the given index.
-    /// </summary>
-    /// <param name="index">The index of the archetype in the cache, <see cref="ComponentType.Id"/> - 1</param>
-
-    internal void RemoveAddEdge(int index)
-    {
-        _addEdges.Remove(index);
-    }
-
-    /// <summary>
-    ///     Removes an Edge at the given index.
-    /// </summary>
-    /// <param name="index">The index of the archetype in the cache, <see cref="ComponentType.Id"/> - 1</param>
-
-    internal void RemoveRemoveEdge(int index)
-    {
-        _removeEdges.Remove(index);
+        lock (_edgeLock)
+        {
+            return _removeEdges[index];
+        }
     }
 
     /// <summary>
@@ -128,56 +132,59 @@ public partial class Archetype
 
     internal void RemoveEdge(Archetype archetype)
     {
-        for (var index = 0; index < _addEdges.Buckets; index++)
+        lock (_edgeLock)
         {
-            // Skip empty buckets
-            ref var bucket = ref _addEdges.GetBucket(index);
-            if (bucket.IsEmpty)
+            for (var index = 0; index < _addEdges.Buckets; index++)
             {
-                continue;
-            }
-
-            // Search bucket for edge and remove it if found
-            for (var itemIndex = 0; itemIndex < bucket.Capacity; itemIndex++)
-            {
-                var edge = bucket[itemIndex];
-                if (edge != archetype)
+                // Skip empty buckets
+                ref var bucket = ref _addEdges.GetBucket(index);
+                if (bucket.IsEmpty)
                 {
                     continue;
                 }
 
-                // Remove from bucket and if the removal caused it being trimmed, break the search and continue with the next
-                RemoveAddEdge((index * BucketSize) + itemIndex);
-                if (bucket.IsEmpty)
+                // Search bucket for edge and remove it if found
+                for (var itemIndex = 0; itemIndex < bucket.Capacity; itemIndex++)
                 {
-                    break;
+                    var edge = bucket[itemIndex];
+                    if (edge != archetype)
+                    {
+                        continue;
+                    }
+
+                    // Remove from bucket and if the removal caused it being trimmed, break the search and continue with the next
+                    _addEdges.Remove((index * BucketSize) + itemIndex);
+                    if (bucket.IsEmpty)
+                    {
+                        break;
+                    }
                 }
             }
-        }
 
-        for (var index = 0; index < _removeEdges.Buckets; index++)
-        {
-            // Skip empty buckets
-            ref var bucket = ref _removeEdges.GetBucket(index);
-            if (bucket.IsEmpty)
+            for (var index = 0; index < _removeEdges.Buckets; index++)
             {
-                continue;
-            }
-
-            // Search bucket for edge and remove it if found
-            for (var itemIndex = 0; itemIndex < bucket.Capacity; itemIndex++)
-            {
-                var edge = bucket[itemIndex];
-                if (edge != archetype)
+                // Skip empty buckets
+                ref var bucket = ref _removeEdges.GetBucket(index);
+                if (bucket.IsEmpty)
                 {
                     continue;
                 }
 
-                // Remove from bucket and if the removal caused it being trimmed, break the search and continue with the next
-                RemoveRemoveEdge((index * BucketSize) + itemIndex);
-                if (bucket.IsEmpty)
+                // Search bucket for edge and remove it if found
+                for (var itemIndex = 0; itemIndex < bucket.Capacity; itemIndex++)
                 {
-                    break;
+                    var edge = bucket[itemIndex];
+                    if (edge != archetype)
+                    {
+                        continue;
+                    }
+
+                    // Remove from bucket and if the removal caused it being trimmed, break the search and continue with the next
+                    _removeEdges.Remove((index * BucketSize) + itemIndex);
+                    if (bucket.IsEmpty)
+                    {
+                        break;
+                    }
                 }
             }
         }

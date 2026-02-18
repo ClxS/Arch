@@ -182,6 +182,14 @@ public partial class World : IDisposable
     /// <param name="baseChunkEntityCount">The minimum amount of <see cref="Entity"/>s per <see cref="Chunk"/>.</param>
     /// <param name="archetypeCapacity">The initial capacity for <see cref="Archetypes"/>.</param>
     /// <param name="entityCapacity">The initial capacity for <see cref="Entity"/>s.</param>
+    /// <summary>
+    ///     Dedicated lock object for synchronizing structural changes to this <see cref="World"/>'s archetype graph.
+    ///     Protects <see cref="GetOrCreateCore"/>, <see cref="GroupToArchetype"/>, and <see cref="Archetypes"/> from
+    ///     concurrent modification when multiple worlds on different threads trigger archetype creation via shared
+    ///     <see cref="ComponentType"/> IDs.
+    /// </summary>
+    private readonly Lock _structuralLock = new();
+
     private World(int id, int baseChunkSize, int baseChunkEntityCount, int archetypeCapacity, int entityCapacity)
     {
         Id = id;
@@ -632,10 +640,25 @@ public partial class World
 
         /// <summary>
     ///     Returns an <see cref="Archetype"/> based on its components. If it does not exist, it will be created.
+    ///     Thread-safe: acquires <see cref="_structuralLock"/> to prevent concurrent archetype creation.
     /// </summary>
     /// <param name="signature">Its <see cref="ComponentType"/>s.</param>
     /// <returns>An existing or new <see cref="Archetype"/>.</returns>
     internal Archetype GetOrCreate(in Signature signature)
+    {
+        lock (_structuralLock)
+        {
+            return GetOrCreateCore(in signature);
+        }
+    }
+
+    /// <summary>
+    ///     Returns an <see cref="Archetype"/> based on its components. If it does not exist, it will be created.
+    ///     Not thread-safe: caller must hold <see cref="_structuralLock"/>.
+    /// </summary>
+    /// <param name="signature">Its <see cref="ComponentType"/>s.</param>
+    /// <returns>An existing or new <see cref="Archetype"/>.</returns>
+    private Archetype GetOrCreateCore(in Signature signature)
     {
         var hashCode = signature.GetHashCode();
         if (TryGetArchetype(hashCode, out var archetype))
