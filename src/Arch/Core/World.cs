@@ -93,6 +93,21 @@ public partial class World
     }
 
     /// <summary>
+    ///     Resolves a <see cref="World"/> by its ID from the volatile backing array.
+    ///     Thread-safe: reads from the volatile <see cref="_worlds"/> field directly.
+    /// </summary>
+    /// <param name="worldId">The world ID to resolve.</param>
+    /// <returns>The <see cref="World"/> instance.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static World Resolve(int worldId)
+    {
+        lock (_worldsLock)
+        {
+            return _worlds[worldId];
+        }
+    }
+
+    /// <summary>
     ///     Stores recycled <see cref="World"/> IDs.
     /// </summary>
     private static PooledQueue<int> RecycledWorldIds {  get; set; } = new(8);
@@ -100,14 +115,29 @@ public partial class World
     /// <summary>
     ///     Tracks how many <see cref="World"/>s exists.
     /// </summary>
-    public static int WorldSize => Interlocked.CompareExchange(ref worldSizeUnsafe, 0, 0);
+    public static int WorldSize
+    {
+        get
+        {
+            return Interlocked.CompareExchange(ref _worldSizeUnsafe, 0, 0);
+        }
+    }
 
-    private static int worldSizeUnsafe;
+    private static int _worldSizeUnsafe;
+
+    /// <summary>
+    ///     Volatile backing field for <see cref="SharedJobScheduler"/>.
+    /// </summary>
+    private static volatile JobScheduler? _sharedJobScheduler;
 
     /// <summary>
     ///     The shared static <see cref="JobScheduler"/> used for Multithreading.
     /// </summary>
-    public static JobScheduler? SharedJobScheduler { get; set; }
+    public static JobScheduler? SharedJobScheduler
+    {
+        get => _sharedJobScheduler;
+        set => _sharedJobScheduler = value;
+    }
 
     private bool _isDisposed;
 
@@ -141,7 +171,7 @@ public partial class World
             }
 
             Worlds[recycledId] = world;
-            Interlocked.Increment(ref worldSizeUnsafe);
+            Interlocked.Increment(ref _worldSizeUnsafe);
             return world;
         }
 #endif
@@ -563,7 +593,7 @@ public partial class World : IDisposable
         {
             Worlds[world.Id] = null!;
             RecycledWorldIds.Enqueue(world.Id);
-            Interlocked.Decrement(ref worldSizeUnsafe);
+            Interlocked.Decrement(ref _worldSizeUnsafe);
         }
 #endif
 

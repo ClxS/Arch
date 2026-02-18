@@ -1,7 +1,6 @@
 using System.Diagnostics.Contracts;
 using Arch.Core;
 using Arch.Core.Utils;
-using CommunityToolkit.HighPerformance;
 
 namespace Arch.Core.Extensions;
 
@@ -22,7 +21,7 @@ public static partial class EntityExtensions
     [Pure]
     public static Archetype GetArchetype(this in Entity entity)
     {
-        var world = World.Worlds.DangerousGetReferenceAt(entity.WorldId);
+        var world = World.Resolve(entity.WorldId);
         return world.GetArchetype(entity);
     }
 
@@ -34,7 +33,7 @@ public static partial class EntityExtensions
     [Pure]
     public static ref readonly Chunk GetChunk(this in Entity entity)
     {
-        var world = World.Worlds.DangerousGetReferenceAt(entity.WorldId);
+        var world = World.Resolve(entity.WorldId);
         return ref world.GetChunk(entity);
     }
 
@@ -46,7 +45,7 @@ public static partial class EntityExtensions
     [Pure]
     public static Signature GetComponentTypes(this in Entity entity)
     {
-        var world = World.Worlds.DangerousGetReferenceAt(entity.WorldId);
+        var world = World.Resolve(entity.WorldId);
         return world.GetSignature(entity);
     }
 
@@ -59,7 +58,7 @@ public static partial class EntityExtensions
     [Pure]
     public static object?[] GetAllComponents(this in Entity entity)
     {
-        var world = World.Worlds.DangerousGetReferenceAt(entity.WorldId);
+        var world = World.Resolve(entity.WorldId);
         return world.GetAllComponents(entity);
     }
 
@@ -71,7 +70,7 @@ public static partial class EntityExtensions
     [Pure]
     public static bool IsAlive(this in Entity entity)
     {
-        var world = World.Worlds.DangerousGetReferenceAt(entity.WorldId);
+        var world = World.Resolve(entity.WorldId);
         return world.IsAlive(entity);
     }
 
@@ -84,7 +83,7 @@ public static partial class EntityExtensions
     [Pure]
     public static ref EntityData IsAlive(this in Entity entity, out bool exists)
     {
-        var world = World.Worlds.DangerousGetReferenceAt(entity.WorldId);
+        var world = World.Resolve(entity.WorldId);
         return ref world.IsAlive(entity, out exists);
     }
 
@@ -96,7 +95,7 @@ public static partial class EntityExtensions
     /// <param name="component">The instance, optional.</param>
     public static void Set<T>(this in Entity entity, in T? component = default)
     {
-        var world = World.Worlds.DangerousGetReferenceAt(entity.WorldId);
+        var world = World.Resolve(entity.WorldId);
         world.Set(entity, in component);
     }
 
@@ -110,7 +109,7 @@ public static partial class EntityExtensions
     [Pure]
     public static bool Has<T>(this in Entity entity)
     {
-        var world = World.Worlds.DangerousGetReferenceAt(entity.WorldId);
+        var world = World.Resolve(entity.WorldId);
         return world.Has<T>(entity);
     }
 
@@ -124,7 +123,7 @@ public static partial class EntityExtensions
     [Pure]
     public static ref T Get<T>(this in Entity entity)
     {
-        var world = World.Worlds.DangerousGetReferenceAt(entity.WorldId);
+        var world = World.Resolve(entity.WorldId);
         return ref world.Get<T>(entity);
     }
 
@@ -140,7 +139,7 @@ public static partial class EntityExtensions
     [Pure]
     public static bool TryGet<T>(this in Entity entity, out T? component)
     {
-        var world = World.Worlds.DangerousGetReferenceAt(entity.WorldId);
+        var world = World.Resolve(entity.WorldId);
         return world.TryGet(entity, out component);
     }
 
@@ -155,7 +154,7 @@ public static partial class EntityExtensions
     [Pure]
     public static ref T TryGetRef<T>(this in Entity entity, out bool exists)
     {
-        var world = World.Worlds.DangerousGetReferenceAt(entity.WorldId);
+        var world = World.Resolve(entity.WorldId);
         return ref world.TryGetRef<T>(entity, out exists);
     }
 
@@ -169,7 +168,7 @@ public static partial class EntityExtensions
 
     public static ref T AddOrGet<T>(this in Entity entity, T? component = default)
     {
-        var world = World.Worlds.DangerousGetReferenceAt(entity.WorldId);
+        var world = World.Resolve(entity.WorldId);
         return ref world.AddOrGet(entity, component);
     }
 
@@ -182,7 +181,7 @@ public static partial class EntityExtensions
 
     public static void Add<T>(this in Entity entity, in T? component = default)
     {
-        var world = World.Worlds.DangerousGetReferenceAt(entity.WorldId);
+        var world = World.Resolve(entity.WorldId);
         world.Add(entity, component);
     }
 
@@ -194,7 +193,7 @@ public static partial class EntityExtensions
 
     public static void Remove<T>(this in Entity entity)
     {
-        var world = World.Worlds.DangerousGetReferenceAt(entity.WorldId);
+        var world = World.Resolve(entity.WorldId);
         world.Remove<T>(entity);
     }
 #endif
@@ -212,7 +211,7 @@ public static partial class EntityExtensions
     /// <param name="cmp">The component.</param>
     public static void Set(this in Entity entity, object cmp)
     {
-        var world = World.Worlds.DangerousGetReferenceAt(entity.WorldId);
+        var world = World.Resolve(entity.WorldId);
         world.Set(entity, cmp);
     }
 
@@ -223,7 +222,7 @@ public static partial class EntityExtensions
     /// <param name="components">The components <see cref="IList{T}"/>.</param>
     public static void SetRange(this in Entity entity, Span<object> components)
     {
-        var world = World.Worlds.DangerousGetReferenceAt(entity.WorldId);
+        var world = World.Resolve(entity.WorldId);
         world.SetRange(entity, components);
     }
 
@@ -236,7 +235,7 @@ public static partial class EntityExtensions
     [Pure]
     public static bool Has(this in Entity entity, ComponentType type)
     {
-        var world = World.Worlds.DangerousGetReferenceAt(entity.WorldId);
+        var world = World.Resolve(entity.WorldId);
         return world.Has(entity, type);
     }
 
@@ -249,7 +248,7 @@ public static partial class EntityExtensions
     [Pure]
     public static bool HasRange(this in Entity entity, Span<ComponentType> types)
     {
-        var world = World.Worlds.DangerousGetReferenceAt(entity.WorldId);
+        var world = World.Resolve(entity.WorldId);
         return world.HasRange(entity, types);
     }
 
@@ -262,7 +261,7 @@ public static partial class EntityExtensions
     [Pure]
     public static object? Get(this in Entity entity, ComponentType type)
     {
-        var world = World.Worlds.DangerousGetReferenceAt(entity.WorldId);
+        var world = World.Resolve(entity.WorldId);
         return world.Get(entity, type);
     }
 
@@ -275,7 +274,7 @@ public static partial class EntityExtensions
     [Pure]
     public static object?[] GetRange(this in Entity entity, Span<ComponentType> types)
     {
-        var world = World.Worlds.DangerousGetReferenceAt(entity.WorldId);
+        var world = World.Resolve(entity.WorldId);
         return world.GetRange(entity, types);
     }
 
@@ -290,7 +289,7 @@ public static partial class EntityExtensions
     [Pure]
     public static void GetRange(this in Entity entity, Span<ComponentType> types, Span<object?> components)
     {
-        var world = World.Worlds.DangerousGetReferenceAt(entity.WorldId);
+        var world = World.Resolve(entity.WorldId);
         world.GetRange(entity, types, components);
     }
 
@@ -305,7 +304,7 @@ public static partial class EntityExtensions
     [Pure]
     public static bool TryGet(this in Entity entity, ComponentType type, out object? component)
     {
-        var world = World.Worlds.DangerousGetReferenceAt(entity.WorldId);
+        var world = World.Resolve(entity.WorldId);
         return world.TryGet(entity, type, out component);
     }
 
@@ -317,7 +316,7 @@ public static partial class EntityExtensions
     [SkipLocalsInit]
     public static void Add(this in Entity entity, in object cmp)
     {
-        var world = World.Worlds.DangerousGetReferenceAt(entity.WorldId);
+        var world = World.Resolve(entity.WorldId);
         world.Add(entity, cmp);
     }
 
@@ -329,7 +328,7 @@ public static partial class EntityExtensions
     [SkipLocalsInit]
     public static void AddRange(this in Entity entity, Span<object> components)
     {
-        var world = World.Worlds.DangerousGetReferenceAt(entity.WorldId);
+        var world = World.Resolve(entity.WorldId);
         world.AddRange(entity, components);
     }
 
@@ -341,7 +340,7 @@ public static partial class EntityExtensions
     [SkipLocalsInit]
     public static void AddRange(this in Entity entity, Span<ComponentType> components)
     {
-        var world = World.Worlds.DangerousGetReferenceAt(entity.WorldId);
+        var world = World.Resolve(entity.WorldId);
         world.AddRange(entity, components);
     }
 
@@ -353,7 +352,7 @@ public static partial class EntityExtensions
     [SkipLocalsInit]
     public static void RemoveRange(this in Entity entity, Span<ComponentType> types)
     {
-        var world = World.Worlds.DangerousGetReferenceAt(entity.WorldId);
+        var world = World.Resolve(entity.WorldId);
         world.RemoveRange(entity, types);
     }
 

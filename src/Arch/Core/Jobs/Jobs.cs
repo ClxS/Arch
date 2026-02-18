@@ -1,3 +1,4 @@
+using System.Threading;
 using CommunityToolkit.HighPerformance;
 using Microsoft.Extensions.ObjectPool;
 using Schedulers;
@@ -19,7 +20,7 @@ public static class JobMeta<T> where T : class, new()
     /// </summary>
     static JobMeta()
     {
-        Id = JobMeta.Id++;
+        Id = Interlocked.Increment(ref JobMeta.Id) - 1;
         Policy = new DefaultObjectPolicy<T>();
         Pool = new DefaultObjectPool<T>(Policy);
     }

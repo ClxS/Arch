@@ -58,7 +58,7 @@ internal sealed class EntityDebugView
     /// </summary>
     public World? World
     {
-        get => IsAlive ? World.Worlds[_entity.WorldId] : null;
+        get => IsAlive ? World.Resolve(_entity.WorldId) : null;
     }
 
     /// <summary>
@@ -66,7 +66,7 @@ internal sealed class EntityDebugView
     /// </summary>
     public Archetype? Archetype
     {
-        get => IsAlive ? World.Worlds[_entity.WorldId].GetArchetype(_entity) : null;
+        get => IsAlive ? World.Resolve(_entity.WorldId).GetArchetype(_entity) : null;
     }
 
     /// <summary>
@@ -74,7 +74,7 @@ internal sealed class EntityDebugView
     /// </summary>
     public Chunk Chunk
     {
-        get => IsAlive ? World.Worlds[_entity.WorldId].GetChunk(_entity) : default;
+        get => IsAlive ? World.Resolve(_entity.WorldId).GetChunk(_entity) : default;
     }
 
     /// <summary>
