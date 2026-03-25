@@ -1,4 +1,4 @@
-﻿using Arch.Core.Events;
+using Arch.Core.Events;
 using Arch.Core.Extensions;
 using Arch.Core.Utils;
 
@@ -19,6 +19,12 @@ public partial class World
     private const int InitialCapacity = 128;
 
     /// <summary>
+    ///     Global sequence counter for handler registration ordering.
+    ///     Ensures typed and non-typed handlers fire in registration order.
+    /// </summary>
+    private long _handlerSequence;
+
+    /// <summary>
     ///     All <see cref="EntityCreatedHandler"/>s in a <see cref="List{T}"/> which will be called upon entity creation.
     /// </summary>
     private readonly List<EntityCreatedHandler> _entityCreatedHandlers = new(InitialCapacity);
@@ -31,17 +37,17 @@ public partial class World
     /// <summary>
     ///     All <see cref="ComponentTypeAddedHandler"/>s in a <see cref="List{T}"/> which will be called after Component added.
     /// </summary>
-    private readonly List<ComponentTypeAddedHandler> _componentTypeAddedHandlers = [];
+    private readonly List<Sequenced<ComponentTypeAddedHandler>> _componentTypeAddedHandlers = [];
 
     /// <summary>
     ///     All <see cref="ComponentTypeAddedHandler"/>s in a <see cref="List{T}"/> which will be called after Component set.
     /// </summary>
-    private readonly List<ComponentTypeSetHandler> _componentTypeSetHandlers = [];
+    private readonly List<Sequenced<ComponentTypeSetHandler>> _componentTypeSetHandlers = [];
 
     /// <summary>
     ///     All <see cref="ComponentTypeAddedHandler"/>s in a <see cref="List{T}"/> which will be called after Component removed.
     /// </summary>
-    private readonly List<ComponentTypeRemovedHandler> _componentTypeRemovedHandlers = [];
+    private readonly List<Sequenced<ComponentTypeRemovedHandler>> _componentTypeRemovedHandlers = [];
 
     /// <summary>
     ///     All <see cref="Events"/> in an array which will be acessed for add, remove or set operations.
@@ -85,19 +91,21 @@ public partial class World
     public void SubscribeComponentAdded<T>(ComponentAddedHandler<T> handler)
     {
 #if EVENTS
+        long seq = Interlocked.Increment(ref _handlerSequence);
+
         ref readonly var events = ref GetEvents<T>();
         lock (events.ComponentAddedGenericHandlers)
         {
-            events.ComponentAddedGenericHandlers.Add(handler);
+            events.ComponentAddedGenericHandlers.Add(new(handler, seq));
         }
 
         lock (events.ComponentAddedHandlers)
         {
-            events.ComponentAddedHandlers.Add((in Entity entity) =>
+            events.ComponentAddedHandlers.Add(new((in Entity entity) =>
             {
                 ref var compGeneric = ref Get<T>(entity);
                 handler(entity, ref compGeneric);
-            });
+            }, seq));
         }
 #endif
     }
@@ -111,9 +119,10 @@ public partial class World
     public void SubscribeComponentAdded(ComponentTypeAddedHandler handler)
     {
 #if EVENTS
+        long seq = Interlocked.Increment(ref _handlerSequence);
         lock (_componentTypeAddedHandlers)
         {
-            _componentTypeAddedHandlers.Add(handler);
+            _componentTypeAddedHandlers.Add(new(handler, seq));
         }
 #endif
     }
@@ -127,9 +136,10 @@ public partial class World
     public void SubscribeComponentSet(ComponentTypeSetHandler handler)
     {
 #if EVENTS
+        long seq = Interlocked.Increment(ref _handlerSequence);
         lock (_componentTypeSetHandlers)
         {
-            _componentTypeSetHandlers.Add(handler);
+            _componentTypeSetHandlers.Add(new(handler, seq));
         }
 #endif
     }
@@ -143,19 +153,21 @@ public partial class World
     public void SubscribeComponentSet<T>(ComponentSetHandler<T> handler)
     {
 #if EVENTS
+        long seq = Interlocked.Increment(ref _handlerSequence);
+
         ref readonly var events = ref GetEvents<T>();
         lock (events.ComponentSetGenericHandlers)
         {
-            events.ComponentSetGenericHandlers.Add(handler);
+            events.ComponentSetGenericHandlers.Add(new(handler, seq));
         }
 
         lock (events.ComponentSetHandlers)
         {
-            events.ComponentSetHandlers.Add((in Entity entity) =>
+            events.ComponentSetHandlers.Add(new((in Entity entity) =>
             {
                 ref var compGeneric = ref Get<T>(entity);
                 handler(entity, ref compGeneric);
-            });
+            }, seq));
         }
 #endif
     }
@@ -169,19 +181,21 @@ public partial class World
     public void SubscribeComponentRemoved<T>(ComponentRemovedHandler<T> handler)
     {
 #if EVENTS
+        long seq = Interlocked.Increment(ref _handlerSequence);
+
         ref readonly var events = ref GetEvents<T>();
         lock (events.ComponentRemovedGenericHandlers)
         {
-            events.ComponentRemovedGenericHandlers.Add(handler);
+            events.ComponentRemovedGenericHandlers.Add(new(handler, seq));
         }
 
         lock (events.ComponentRemovedHandlers)
         {
-            events.ComponentRemovedHandlers.Add((in Entity entity) =>
+            events.ComponentRemovedHandlers.Add(new((in Entity entity) =>
             {
                 ref var compGeneric = ref Get<T>(entity);
                 handler(entity, ref compGeneric);
-            });
+            }, seq));
         }
 #endif
     }
@@ -195,9 +209,10 @@ public partial class World
     public void SubscribeComponentRemoved(ComponentTypeRemovedHandler handler)
     {
 #if EVENTS
+        long seq = Interlocked.Increment(ref _handlerSequence);
         lock (_componentTypeRemovedHandlers)
         {
-            _componentTypeRemovedHandlers.Add(handler);
+            _componentTypeRemovedHandlers.Add(new(handler, seq));
         }
 #endif
     }
@@ -216,8 +231,6 @@ public partial class World
             count = _entityCreatedHandlers.Count;
         }
 
-        // The thread-safety here relies on the fact that handlers can NEVER be unsubscribed.
-        // We still have to lock to access the handler, because what if someone is adding in the middle of our access?
         for (var i = 0; i < count; i++)
         {
             EntityCreatedHandler handler;
@@ -260,6 +273,7 @@ public partial class World
 
     /// <summary>
     ///     Calls all generic handlers subscribed to component addition of this type.
+    ///     Handlers are dispatched in registration order across both typed and non-typed lists.
     /// </summary>
     /// <param name="entity">The entity that the component was added to.</param>
     /// <typeparam name="T">The type of component that got added.</typeparam>
@@ -267,46 +281,36 @@ public partial class World
     public void OnComponentAdded<T>(Entity entity)
     {
 #if EVENTS
-        int count;
-        lock (_componentTypeAddedHandlers)
-        {
-            count = _componentTypeAddedHandlers.Count;
-        }
-
-        for (var i = 0; i < count; i++)
-        {
-            ComponentTypeAddedHandler handler;
-            lock (_componentTypeAddedHandlers)
-            {
-                handler = _componentTypeAddedHandlers[i];
-            }
-
-            handler.Invoke(in entity, Component.GetComponentType(typeof(T)));
-        }
-
         ref readonly var events = ref GetEvents<T>();
         ref var added = ref Get<T>(entity);
 
-        lock (events.ComponentAddedGenericHandlers)
-        {
-            count = events.ComponentAddedGenericHandlers.Count;
-        }
+        int globalCount, typedCount;
+        lock (_componentTypeAddedHandlers) { globalCount = _componentTypeAddedHandlers.Count; }
+        lock (events.ComponentAddedGenericHandlers) { typedCount = events.ComponentAddedGenericHandlers.Count; }
 
-        for (var i = 0; i < count; i++)
+        int gi = 0, ti = 0;
+        while (gi < globalCount || ti < typedCount)
         {
-            ComponentAddedHandler<T> handler;
-            lock (events.ComponentAddedGenericHandlers)
+            long globalSeq = gi < globalCount ? _componentTypeAddedHandlers[gi].Sequence : long.MaxValue;
+            long typedSeq = ti < typedCount ? events.ComponentAddedGenericHandlers[ti].Sequence : long.MaxValue;
+
+            if (globalSeq <= typedSeq)
             {
-                handler = events.ComponentAddedGenericHandlers[i];
+                _componentTypeAddedHandlers[gi].Handler.Invoke(in entity, Component.GetComponentType(typeof(T)));
+                gi++;
             }
-
-            handler(in entity, ref added);
+            else
+            {
+                events.ComponentAddedGenericHandlers[ti].Handler(in entity, ref added);
+                ti++;
+            }
         }
 #endif
     }
 
     /// <summary>
     ///     Calls all generic handlers subscribed to component setting of this type.
+    ///     Handlers are dispatched in registration order across both typed and non-typed lists.
     /// </summary>
     /// <param name="entity">The entity that the component was set on.</param>
     /// <typeparam name="T">The type of component that got set.</typeparam>
@@ -314,46 +318,36 @@ public partial class World
     public void OnComponentSet<T>(Entity entity)
     {
 #if EVENTS
-        int count;
-        lock (_componentTypeSetHandlers)
-        {
-            count = _componentTypeSetHandlers.Count;
-        }
-
-        for (var i = 0; i < count; i++)
-        {
-            ComponentTypeSetHandler handler;
-            lock (_componentTypeSetHandlers)
-            {
-                handler = _componentTypeSetHandlers[i];
-            }
-
-            handler.Invoke(in entity, Component.GetComponentType(typeof(T)));
-        }
-
         ref readonly var events = ref GetEvents<T>();
         ref var set = ref Get<T>(entity);
 
-        lock (events.ComponentSetGenericHandlers)
-        {
-            count = events.ComponentSetGenericHandlers.Count;
-        }
+        int globalCount, typedCount;
+        lock (_componentTypeSetHandlers) { globalCount = _componentTypeSetHandlers.Count; }
+        lock (events.ComponentSetGenericHandlers) { typedCount = events.ComponentSetGenericHandlers.Count; }
 
-        for (var i = 0; i < count; i++)
+        int gi = 0, ti = 0;
+        while (gi < globalCount || ti < typedCount)
         {
-            ComponentSetHandler<T> handler;
-            lock (events.ComponentSetGenericHandlers)
+            long globalSeq = gi < globalCount ? _componentTypeSetHandlers[gi].Sequence : long.MaxValue;
+            long typedSeq = ti < typedCount ? events.ComponentSetGenericHandlers[ti].Sequence : long.MaxValue;
+
+            if (globalSeq <= typedSeq)
             {
-                handler = events.ComponentSetGenericHandlers[i];
+                _componentTypeSetHandlers[gi].Handler.Invoke(in entity, Component.GetComponentType(typeof(T)));
+                gi++;
             }
-
-            handler(in entity, ref set);
+            else
+            {
+                events.ComponentSetGenericHandlers[ti].Handler(in entity, ref set);
+                ti++;
+            }
         }
 #endif
     }
 
     /// <summary>
     ///     Calls all generic handlers subscribed to component removal.
+    ///     Handlers are dispatched in registration order across both typed and non-typed lists.
     /// </summary>
     /// <param name="entity">The entity that the component was removed from.</param>
     /// <typeparam name="T">The type of component that got removed.</typeparam>
@@ -361,40 +355,29 @@ public partial class World
     public void OnComponentRemoved<T>(Entity entity)
     {
 #if EVENTS
-        int count;
-        lock (_componentTypeRemovedHandlers)
-        {
-            count = _componentTypeRemovedHandlers.Count;
-        }
-
-        for (var i = 0; i < count; i++)
-        {
-            ComponentTypeRemovedHandler handler;
-            lock (_componentTypeRemovedHandlers)
-            {
-                handler = _componentTypeRemovedHandlers[i];
-            }
-
-            handler.Invoke(in entity, Component.GetComponentType(typeof(T)));
-        }
-
         ref readonly var events = ref GetEvents<T>();
         ref var removed = ref Get<T>(entity);
 
-        lock (events.ComponentRemovedGenericHandlers)
-        {
-            count = events.ComponentRemovedGenericHandlers.Count;
-        }
+        int globalCount, typedCount;
+        lock (_componentTypeRemovedHandlers) { globalCount = _componentTypeRemovedHandlers.Count; }
+        lock (events.ComponentRemovedGenericHandlers) { typedCount = events.ComponentRemovedGenericHandlers.Count; }
 
-        for (var i = 0; i < count; i++)
+        int gi = 0, ti = 0;
+        while (gi < globalCount || ti < typedCount)
         {
-            ComponentRemovedHandler<T> handler;
-            lock (events.ComponentRemovedGenericHandlers)
+            long globalSeq = gi < globalCount ? _componentTypeRemovedHandlers[gi].Sequence : long.MaxValue;
+            long typedSeq = ti < typedCount ? events.ComponentRemovedGenericHandlers[ti].Sequence : long.MaxValue;
+
+            if (globalSeq <= typedSeq)
             {
-                handler = events.ComponentRemovedGenericHandlers[i];
+                _componentTypeRemovedHandlers[gi].Handler.Invoke(in entity, Component.GetComponentType(typeof(T)));
+                gi++;
             }
-
-            handler(in entity, ref removed);
+            else
+            {
+                events.ComponentRemovedGenericHandlers[ti].Handler(in entity, ref removed);
+                ti++;
+            }
         }
 #endif
     }
@@ -408,43 +391,28 @@ public partial class World
     public void OnComponentAdded(Entity entity, ComponentType compType)
     {
 #if EVENTS
-        int count;
-        lock (_componentTypeAddedHandlers)
-        {
-            count = _componentTypeAddedHandlers.Count;
-        }
-
-        for (var i = 0; i < count; i++)
-        {
-            ComponentTypeAddedHandler handler;
-            lock (_componentTypeAddedHandlers)
-            {
-                handler = _componentTypeAddedHandlers[i];
-            }
-
-            handler.Invoke(in entity, compType);
-        }
-
         var events = GetEvents(compType);
-        if (events == null)
-        {
-            return;
-        }
 
-        lock (events.ComponentAddedHandlers)
-        {
-            count = events.ComponentAddedHandlers.Count;
-        }
+        int globalCount, perTypeCount = 0;
+        lock (_componentTypeAddedHandlers) { globalCount = _componentTypeAddedHandlers.Count; }
+        if (events != null) { lock (events.ComponentAddedHandlers) { perTypeCount = events.ComponentAddedHandlers.Count; } }
 
-        for (var i = 0; i < count; i++)
+        int gi = 0, ti = 0;
+        while (gi < globalCount || ti < perTypeCount)
         {
-            ComponentAddedHandler handler;
-            lock (events.ComponentAddedHandlers)
+            long globalSeq = gi < globalCount ? _componentTypeAddedHandlers[gi].Sequence : long.MaxValue;
+            long typedSeq = ti < perTypeCount ? events!.ComponentAddedHandlers[ti].Sequence : long.MaxValue;
+
+            if (globalSeq <= typedSeq)
             {
-                handler = events.ComponentAddedHandlers[i];
+                _componentTypeAddedHandlers[gi].Handler.Invoke(in entity, compType);
+                gi++;
             }
-
-            handler(in entity);
+            else
+            {
+                events!.ComponentAddedHandlers[ti].Handler(in entity);
+                ti++;
+            }
         }
 #endif
     }
@@ -458,43 +426,29 @@ public partial class World
     public void OnComponentSet(Entity entity, object comp)
     {
 #if EVENTS
-        int count;
-        lock (_componentTypeSetHandlers)
-        {
-            count = _componentTypeSetHandlers.Count;
-        }
-
-        for (var i = 0; i < count; i++)
-        {
-            ComponentTypeSetHandler handler;
-            lock (_componentTypeSetHandlers)
-            {
-                handler = _componentTypeSetHandlers[i];
-            }
-
-            handler.Invoke(in entity, Component.GetComponentType(comp.GetType()));
-        }
-
+        var compType = Component.GetComponentType(comp.GetType());
         var events = GetEvents(comp.GetType());
-        if (events == null)
-        {
-            return;
-        }
 
-        lock (events.ComponentSetHandlers)
-        {
-            count = events.ComponentSetHandlers.Count;
-        }
+        int globalCount, perTypeCount = 0;
+        lock (_componentTypeSetHandlers) { globalCount = _componentTypeSetHandlers.Count; }
+        if (events != null) { lock (events.ComponentSetHandlers) { perTypeCount = events.ComponentSetHandlers.Count; } }
 
-        for (var i = 0; i < count; i++)
+        int gi = 0, ti = 0;
+        while (gi < globalCount || ti < perTypeCount)
         {
-            ComponentSetHandler handler;
-            lock (events.ComponentSetHandlers)
+            long globalSeq = gi < globalCount ? _componentTypeSetHandlers[gi].Sequence : long.MaxValue;
+            long typedSeq = ti < perTypeCount ? events!.ComponentSetHandlers[ti].Sequence : long.MaxValue;
+
+            if (globalSeq <= typedSeq)
             {
-                handler = events.ComponentSetHandlers[i];
+                _componentTypeSetHandlers[gi].Handler.Invoke(in entity, compType);
+                gi++;
             }
-
-            handler(in entity);
+            else
+            {
+                events!.ComponentSetHandlers[ti].Handler(in entity);
+                ti++;
+            }
         }
 #endif
     }
@@ -508,43 +462,28 @@ public partial class World
     public void OnComponentRemoved(Entity entity, ComponentType compType)
     {
 #if EVENTS
-        int count;
-        lock (_componentTypeRemovedHandlers)
-        {
-            count = _componentTypeRemovedHandlers.Count;
-        }
-
-        for (var i = 0; i < count; i++)
-        {
-            ComponentTypeRemovedHandler handler;
-            lock (_componentTypeRemovedHandlers)
-            {
-                handler = _componentTypeRemovedHandlers[i];
-            }
-
-            handler.Invoke(in entity, compType);
-        }
-
         var events = GetEvents(compType);
-        if (events == null)
-        {
-            return;
-        }
 
-        lock (events.ComponentRemovedHandlers)
-        {
-            count = events.ComponentRemovedHandlers.Count;
-        }
+        int globalCount, perTypeCount = 0;
+        lock (_componentTypeRemovedHandlers) { globalCount = _componentTypeRemovedHandlers.Count; }
+        if (events != null) { lock (events.ComponentRemovedHandlers) { perTypeCount = events.ComponentRemovedHandlers.Count; } }
 
-        for (var i = 0; i < count; i++)
+        int gi = 0, ti = 0;
+        while (gi < globalCount || ti < perTypeCount)
         {
-            ComponentRemovedHandler handler;
-            lock (events.ComponentRemovedHandlers)
+            long globalSeq = gi < globalCount ? _componentTypeRemovedHandlers[gi].Sequence : long.MaxValue;
+            long typedSeq = ti < perTypeCount ? events!.ComponentRemovedHandlers[ti].Sequence : long.MaxValue;
+
+            if (globalSeq <= typedSeq)
             {
-                handler = events.ComponentRemovedHandlers[i];
+                _componentTypeRemovedHandlers[gi].Handler.Invoke(in entity, compType);
+                gi++;
             }
-
-            handler(in entity);
+            else
+            {
+                events!.ComponentRemovedHandlers[ti].Handler(in entity);
+                ti++;
+            }
         }
 #endif
     }
