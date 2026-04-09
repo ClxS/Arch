@@ -360,12 +360,10 @@ public partial class World : IDisposable
         EntityInfo.Add(entity.Id, archetype, slot, entity.Version);
         OnEntityCreated(entity);
 
-#if EVENTS
-        foreach (ref var type in types)
-        {
-            OnComponentAdded(entity, type);
-        }
-#endif
+        // Trident fork: do NOT fire OnComponentAdded for components introduced by Create.
+        // Subscribers that need to know about components on newly-created entities should
+        // listen to OnEntityCreated and inspect the entity's archetype directly.
+        // Firing N per-component events on every Create dominated SyncRenderWorld replay cost.
 
         return entity;
     }
@@ -414,14 +412,11 @@ public partial class World : IDisposable
     [StructuralChange]
     public void Destroy(Entity entity)
     {
-        #if EVENTS
-        // Raise the OnComponentRemoved event for each component on the entity.
-        var arch = GetArchetype(entity);
-        foreach (var compType in arch.Signature)
-        {
-            OnComponentRemoved(entity, compType);
-        }
-        #endif
+        // Trident fork: do NOT fire OnComponentRemoved for components stripped by Destroy.
+        // Subscribers that need to clean up per-component state should listen to
+        // OnEntityDestroyed and inspect the entity's archetype before it goes away.
+        // Firing N per-component events on every Destroy dominated CullPendingDeletionEntities
+        // and SyncRenderWorld replay cost.
 
         OnEntityDestroyed(entity);
 
@@ -890,15 +885,8 @@ public partial class World
                 {
                     var entity = Unsafe.Add(ref entityFirstElement, index);
 
-                    #if EVENTS
-                    // Raise the OnComponentRemoved event for each component on the entity.
-                    var arch = GetArchetype(entity);
-                    foreach (var compType in arch.Signature)
-                    {
-                        OnComponentRemoved(entity, compType);
-                    }
-                    #endif
-
+                    // Trident fork: see Destroy(Entity) for the rationale on suppressing
+                    // OnComponentRemoved events during destruction.
                     OnEntityDestroyed(entity);
                     DestroyEntityInternal(entity);
                 }
