@@ -32,7 +32,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Copyright>Apache2.0</Copyright>
 
-    <NoWarn>1701;1702;1591</NoWarn>
+    <NoWarn>$(NoWarn);1701;1702;1591;NU1510</NoWarn>
     <UnityPublish>true</UnityPublish>
   </PropertyGroup>
 
@@ -72,7 +72,7 @@
   </ItemGroup>
 
   <PropertyGroup>
-    <DefineConstants>%(DefineConstants);EVENTS</DefineConstants>
+    <DefineConstants>$(DefineConstants);EVENTS</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
