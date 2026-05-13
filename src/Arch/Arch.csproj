@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
@@ -88,10 +88,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Collections.Pooled" Version="2.0.0-preview.27" />
-    <PackageReference Include="CommunityToolkit.HighPerformance" Version="8.4.0" />
-    <PackageReference Include="Microsoft.Extensions.ObjectPool" Version="7.0.0" />
-    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.0.0" />
+    <PackageReference Include="Collections.Pooled" />
+    <PackageReference Include="CommunityToolkit.HighPerformance" />
+    <PackageReference Include="Microsoft.Extensions.ObjectPool" />
+    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" />
   </ItemGroup>
 
   <ItemGroup>
