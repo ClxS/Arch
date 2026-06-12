@@ -702,7 +702,7 @@ public sealed partial class Archetype
     }
 }
 
-public sealed unsafe partial class Archetype
+public sealed partial class Archetype
 {
 
     /// <summary>
